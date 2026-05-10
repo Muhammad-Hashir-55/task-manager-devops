@@ -1,0 +1,100 @@
+name: Staging Environment CI/CD
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-test-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
+      - name: Install backend dependencies
+        run: |
+          cd backend
+          npm install
+
+      - name: Run unit tests
+        run: |
+          cd backend
+          npm test
+
+      - name: Run linting
+        run: |
+          cd backend
+          npx eslint src/ --ext .js --max-warnings=0 || true
+
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          npm install
+
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm run build
+
+      - name: Deploy to Staging Server
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_STAGING_IP }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd /home/ubuntu/app || git clone https://github.com/${{ github.repository }}.git /home/ubuntu/app
+            cd /home/ubuntu/app
+            git fetch origin
+            git checkout main
+            git pull origin main
+            sudo docker-compose down || true
+            sudo docker-compose up -d --build
+
+      - name: Send success email to QA
+        if: success()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.EMAIL_USER }}
+          password: ${{ secrets.EMAIL_PASS }}
+          subject: "✅ Staging Deploy Successful - ${{ github.sha }}"
+          to: ${{ secrets.INSTRUCTOR_EMAIL }}
+          from: ${{ secrets.EMAIL_USER }}
+          body: |
+            The latest changes have been successfully deployed to the Staging environment.
+
+            Commit: ${{ github.sha }}
+            Author: ${{ github.actor }}
+            Branch: main
+
+            Access the deployed app at: http://${{ secrets.EC2_STAGING_IP }}:3000
+
+      - name: Send failure email
+        if: failure()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.EMAIL_USER }}
+          password: ${{ secrets.EMAIL_PASS }}
+          subject: "❌ Staging Workflow Failed - ${{ github.sha }}"
+          to: ${{ secrets.INSTRUCTOR_EMAIL }},${{ github.actor }}@gmail.com
+          from: ${{ secrets.EMAIL_USER }}
+          body: |
+            The staging deployment workflow has failed.
+
+            Commit: ${{ github.sha }}
+            Author: ${{ github.actor }}
+            Branch: main
+
+            Please check the workflow logs at:
+            https://github.com/${{ github.repository }}/actions
