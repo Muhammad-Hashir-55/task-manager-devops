@@ -55,8 +55,8 @@ jobs:
             git fetch origin
             git checkout main
             git pull origin main
-            sudo docker-compose down || true
             echo "REACT_APP_API_URL=http://${{ secrets.EC2_STAGING_IP }}:5000" > .env
+            sudo docker-compose down || true
             sudo docker-compose up -d --build
 
       - name: Send success email to QA
