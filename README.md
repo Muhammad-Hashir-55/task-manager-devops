@@ -1,5 +1,6 @@
 # 📋 Task Manager Application
 
+
 > A modern, full-stack task management application with Docker containerization and Docker Compose orchestration.
 
 ---
